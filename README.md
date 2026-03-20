@@ -2,7 +2,7 @@
 
 An MCP (Model Context Protocol) server that connects AI assistants to the [Deribit](https://www.deribit.com) cryptocurrency derivatives exchange. Get options chains, analyze volatility surfaces, manage positions, and execute trades — all through natural language.
 
-Works with Claude Desktop, Claude Code, or any MCP-compatible client.
+Works with Claude Desktop, Claude Code, or any MCP-compatible client. Supports both **stdio** (local) and **HTTP** (remote) transports.
 
 ## What you can do
 
@@ -109,6 +109,68 @@ Restart Claude Desktop. The deribit tools will appear in your conversation.
 | `get_portfolio_greeks` | Aggregated delta/gamma/vega/theta across all option positions |
 | `get_portfolio_summary` | One-shot account overview: balances + positions + orders |
 
+## Remote deployment (HTTP transport)
+
+For use with hosted agent platforms (Stack AI, custom apps, etc.), the server supports Streamable HTTP transport.
+
+### 1. Configure environment
+
+Add these to your `.env` alongside the Deribit credentials:
+
+```
+MCP_TRANSPORT=http
+PORT=3000
+MCP_API_KEY=your_secret_api_key
+MCP_CORS_ORIGIN=https://your-app.com
+```
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `MCP_TRANSPORT` | Yes | `stdio` | Set to `http` to enable HTTP mode |
+| `PORT` | No | `3000` | HTTP server port |
+| `MCP_API_KEY` | No | — | Bearer token for authentication. If set, all requests must include `Authorization: Bearer <key>` |
+| `MCP_CORS_ORIGIN` | No | `*` | Allowed CORS origin. Set to your app's domain in production |
+
+### 2. Start the server
+
+```bash
+npm run start:http
+# → Deribit MCP server listening on http://localhost:3000/mcp
+```
+
+### 3. Connect your MCP client
+
+Point any MCP-compatible client at the `/mcp` endpoint:
+
+```json
+{
+  "mcpServers": {
+    "deribit": {
+      "type": "streamable-http",
+      "url": "https://your-deployment.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer your_secret_api_key"
+      }
+    }
+  }
+}
+```
+
+### Deployment options
+
+The HTTP server runs on any Node.js host:
+
+- **Railway** — `npm run build && npm run start:http` as the start command, set env vars in the dashboard
+- **Fly.io** — deploy with `fly launch`, expose the port
+- **Replit** — add as a Node.js project, set env vars in Secrets
+- **Docker** — `FROM node:22-slim`, `CMD ["npm", "run", "start:http"]`
+
+### Security notes
+
+- **Always set `MCP_API_KEY`** in production. Without it, anyone who finds the URL can use your Deribit credentials.
+- **Set `MCP_CORS_ORIGIN`** to your app's domain to prevent unauthorized browser-based access.
+- **Never expose Deribit credentials** in client-side code. The MCP server holds them server-side.
+
 ## Example prompts
 
 Once configured, try asking Claude:
@@ -145,7 +207,7 @@ npm run test:watch   # Watch mode for tests
 
 ```
 src/
-├── index.ts              # MCP server entry point (stdio transport)
+├── index.ts              # Entry point — stdio or HTTP transport based on MCP_TRANSPORT
 ├── deribit-client.ts     # JSON-RPC client with auto-auth
 └── tools/
     ├── public.ts         # Market data tools (no auth)
@@ -153,7 +215,10 @@ src/
     └── workflow.ts       # Composite tools (chain multiple calls)
 ```
 
-The server uses stdio transport — Claude Desktop spawns and manages the process automatically. All Deribit communication is over HTTPS to the JSON-RPC v2 API.
+- **stdio mode** (default) — Claude Desktop spawns and manages the process automatically
+- **HTTP mode** — runs a standalone HTTP server with a single `/mcp` endpoint using Streamable HTTP transport
+
+All Deribit communication is over HTTPS to the JSON-RPC v2 API.
 
 ## Switching to mainnet
 
