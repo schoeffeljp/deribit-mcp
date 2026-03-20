@@ -66,7 +66,8 @@ export function registerPrivateTools(server: McpServer, client: DeribitClient) {
     "Place a buy order on Deribit. Supports limit, market, stop_limit, and stop_market order types. Use with caution — this places a real trade.",
     {
       instrument_name: z.string().describe("Instrument name (e.g. 'BTC-28MAR25-80000-C')"),
-      amount: z.number().describe("Order size in contracts"),
+      contracts: z.number().optional().describe("Number of contracts to buy (preferred for options)"),
+      amount: z.number().optional().describe("Order size in base currency. Use 'contracts' instead for options."),
       type: z.enum(["limit", "market", "stop_limit", "stop_market"]).optional().describe("Order type (default 'limit')"),
       price: z.number().optional().describe("Order price (required for limit orders)"),
       time_in_force: z.enum(["good_til_cancelled", "good_til_day", "fill_or_kill", "immediate_or_cancel"]).optional().describe("Time in force"),
@@ -74,8 +75,13 @@ export function registerPrivateTools(server: McpServer, client: DeribitClient) {
       reduce_only: z.boolean().optional().describe("Reduce-only order"),
       label: z.string().optional().describe("User-defined label for the order"),
     },
-    async ({ instrument_name, amount, type, price, time_in_force, post_only, reduce_only, label }) => {
-      const params: Record<string, unknown> = { instrument_name, amount };
+    async ({ instrument_name, contracts, amount, type, price, time_in_force, post_only, reduce_only, label }) => {
+      if (!contracts && !amount) {
+        return { content: [{ type: "text" as const, text: "Error: either 'contracts' or 'amount' must be provided" }] };
+      }
+      const params: Record<string, unknown> = { instrument_name };
+      if (contracts !== undefined) params.contracts = contracts;
+      else if (amount !== undefined) params.amount = amount;
       if (type) params.type = type;
       if (price !== undefined) params.price = price;
       if (time_in_force) params.time_in_force = time_in_force;
@@ -96,7 +102,8 @@ export function registerPrivateTools(server: McpServer, client: DeribitClient) {
     "Place a sell order on Deribit. Supports limit, market, stop_limit, and stop_market order types. Use with caution — this places a real trade.",
     {
       instrument_name: z.string().describe("Instrument name (e.g. 'BTC-28MAR25-80000-C')"),
-      amount: z.number().describe("Order size in contracts"),
+      contracts: z.number().optional().describe("Number of contracts to sell (preferred for options)"),
+      amount: z.number().optional().describe("Order size in base currency. Use 'contracts' instead for options."),
       type: z.enum(["limit", "market", "stop_limit", "stop_market"]).optional().describe("Order type (default 'limit')"),
       price: z.number().optional().describe("Order price (required for limit orders)"),
       time_in_force: z.enum(["good_til_cancelled", "good_til_day", "fill_or_kill", "immediate_or_cancel"]).optional().describe("Time in force"),
@@ -104,8 +111,13 @@ export function registerPrivateTools(server: McpServer, client: DeribitClient) {
       reduce_only: z.boolean().optional().describe("Reduce-only order"),
       label: z.string().optional().describe("User-defined label for the order"),
     },
-    async ({ instrument_name, amount, type, price, time_in_force, post_only, reduce_only, label }) => {
-      const params: Record<string, unknown> = { instrument_name, amount };
+    async ({ instrument_name, contracts, amount, type, price, time_in_force, post_only, reduce_only, label }) => {
+      if (!contracts && !amount) {
+        return { content: [{ type: "text" as const, text: "Error: either 'contracts' or 'amount' must be provided" }] };
+      }
+      const params: Record<string, unknown> = { instrument_name };
+      if (contracts !== undefined) params.contracts = contracts;
+      else if (amount !== undefined) params.amount = amount;
       if (type) params.type = type;
       if (price !== undefined) params.price = price;
       if (time_in_force) params.time_in_force = time_in_force;
@@ -166,15 +178,17 @@ export function registerPrivateTools(server: McpServer, client: DeribitClient) {
     "Modify an existing open order's price, amount, or other parameters without cancelling and re-placing.",
     {
       order_id: z.string().describe("The order ID to edit"),
-      amount: z.number().optional().describe("New order size"),
+      contracts: z.number().optional().describe("New size in number of contracts (preferred for options)"),
+      amount: z.number().optional().describe("New order size in base currency"),
       price: z.number().optional().describe("New order price"),
       post_only: z.boolean().optional().describe("Post-only flag"),
       reduce_only: z.boolean().optional().describe("Reduce-only flag"),
       trigger_price: z.number().optional().describe("New trigger price for stop/take-profit orders"),
     },
-    async ({ order_id, amount, price, post_only, reduce_only, trigger_price }) => {
+    async ({ order_id, contracts, amount, price, post_only, reduce_only, trigger_price }) => {
       const params: Record<string, unknown> = { order_id };
-      if (amount !== undefined) params.amount = amount;
+      if (contracts !== undefined) params.contracts = contracts;
+      else if (amount !== undefined) params.amount = amount;
       if (price !== undefined) params.price = price;
       if (post_only !== undefined) params.post_only = post_only;
       if (reduce_only !== undefined) params.reduce_only = reduce_only;
