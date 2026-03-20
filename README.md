@@ -23,7 +23,7 @@ You need `read` + `trade` scopes for full functionality. Public market data work
 ### 2. Clone and build
 
 ```bash
-git clone https://github.com/jpschoeffel/deribit-mcp.git
+git clone https://github.com/schoeffeljp/deribit-mcp.git
 cd deribit-mcp
 npm install
 npm run build

@@ -22,7 +22,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jpschoeffel/deribit-mcp.git"
+    "url": "git+https://github.com/schoeffeljp/deribit-mcp.git"
   },
   "author": "JP Schoeffel",
   "engines": {
