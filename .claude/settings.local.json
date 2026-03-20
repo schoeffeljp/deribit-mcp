@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "WebFetch(domain:docs.deribit.com)",
+      "Bash(npm test:*)",
+      "Bash(gh auth:*)",
+      "Bash(git --version)",
+      "Bash(sudo chown:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}
