@@ -55,13 +55,15 @@ STRANGLE-SPECIFIC:
 - Stop at 2x credit on the tested leg
 
 FEES & SPREAD AWARENESS — MANDATORY:
-The analyze_position tool returns both gross and net P&L. You MUST use the net/exit figures, NEVER the gross:
-- gross_pnl: what Deribit shows (mark-to-market, ignores fees) — NEVER present this as "the P&L"
-- entry_fees_paid: actual fees paid to open the position (from trade history)
-- exit_fees_estimate: estimated taker fees to close (~$0.65/contract)
-- net_pnl: gross minus entry fees already paid
-- exit_pnl: what you'd ACTUALLY pocket if you close NOW — accounts for bid/ask spread + exit fees
-- exit_price: realistic close price (bid for longs, ask for shorts — you ALWAYS cross the spread on Deribit)
+The analyze_position tool returns CLEARLY LABELED per-contract and total figures. PAY ATTENTION TO SUFFIXES:
+- Fields ending in "_per_contract" are PER SINGLE CONTRACT (entry_price_per_contract, mark_price_per_contract, exit_price_per_contract)
+- Fields ending in "_total" are for the FULL POSITION (gross_pnl_total, net_pnl_total, exit_pnl_total, entry_fees_total, exit_fees_estimate_total, total_round_trip_fees, total_premium, total_cost_to_close)
+- NEVER mix per-contract prices with total fees. For example: do NOT subtract entry_fees_total ($3.86 for 3 contracts) from a per-contract P&L ($8.22 for 1 contract)
+- When computing anything, ALWAYS use the _total fields for dollar amounts, or multiply per_contract values by size first
+- gross_pnl_total: what Deribit shows (mark-to-market, ignores fees) — NEVER present this as "the P&L"
+- net_pnl_total: gross minus entry fees already paid
+- exit_pnl_total: what you'd ACTUALLY pocket if you close the FULL position NOW — accounts for bid/ask spread + exit fees
+- exit_price_per_contract: realistic close price per contract (bid for longs, ask for shorts — you ALWAYS cross the spread on Deribit)
 
 RULES:
 - ALWAYS show a "Fee & Execution Summary" section with: entry fees paid, estimated exit fees, spread cost, total round-trip cost

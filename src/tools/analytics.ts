@@ -307,25 +307,33 @@ export function registerAnalyticsTools(server: McpServer, client: DeribitClient)
           recommendation = "ROLL";
         }
 
+        // Totals for clarity (all $ figures are TOTAL for the full position, not per-contract)
+        const totalPremium = entryPrice * absSize;
+        const totalCostToClose = exitPrice * absSize;
+
         analyses.push({
           instrument_name: p.instrument_name,
           direction,
           size: absSize,
-          entry_price: entryPrice,
-          mark_price: markPrice,
-          best_bid: Math.round(bestBid * 10000) / 10000,
-          best_ask: Math.round(bestAsk * 10000) / 10000,
-          spread: Math.round(spread * 10000) / 10000,
-          // P&L breakdown
-          gross_pnl: Math.round(grossPnl * 100) / 100,
+          // Per-contract prices
+          entry_price_per_contract: entryPrice,
+          mark_price_per_contract: markPrice,
+          exit_price_per_contract: Math.round(exitPrice * 10000) / 10000,
+          best_bid_per_contract: Math.round(bestBid * 10000) / 10000,
+          best_ask_per_contract: Math.round(bestAsk * 10000) / 10000,
+          spread_per_contract: Math.round(spread * 10000) / 10000,
+          // TOTAL position values (all $ amounts below are for ALL contracts combined)
+          total_premium: Math.round(totalPremium * 100) / 100,
+          total_cost_to_close: Math.round(totalCostToClose * 100) / 100,
+          gross_pnl_total: Math.round(grossPnl * 100) / 100,
           gross_pnl_pct: Math.round(grossPnlPct * 10) / 10,
-          entry_fees_paid: Math.round(entryFees * 100) / 100,
-          exit_fees_estimate: Math.round(exitFeesEstimate * 100) / 100,
-          net_pnl: Math.round(netPnl * 100) / 100,
+          entry_fees_total: Math.round(entryFees * 100) / 100,
+          exit_fees_estimate_total: Math.round(exitFeesEstimate * 100) / 100,
+          total_round_trip_fees: Math.round((entryFees + exitFeesEstimate) * 100) / 100,
+          net_pnl_total: Math.round(netPnl * 100) / 100,
           net_pnl_pct: Math.round(netPnlPct * 10) / 10,
-          // Exit simulation
-          exit_price: Math.round(exitPrice * 10000) / 10000,
-          exit_pnl: Math.round(exitPnl * 100) / 100,
+          // Exit simulation (TOTAL if you close the full position now)
+          exit_pnl_total: Math.round(exitPnl * 100) / 100,
           exit_pnl_pct: Math.round(exitPnlPct * 10) / 10,
           max_profit_pct: maxProfitPct,
           dte: Math.round(parsed.dte * 10) / 10,
