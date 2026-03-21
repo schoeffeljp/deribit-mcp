@@ -58,7 +58,7 @@ FEES & SPREAD AWARENESS — MANDATORY:
 The analyze_position tool returns both gross and net P&L. You MUST use the net/exit figures, NEVER the gross:
 - gross_pnl: what Deribit shows (mark-to-market, ignores fees) — NEVER present this as "the P&L"
 - entry_fees_paid: actual fees paid to open the position (from trade history)
-- exit_fees_estimate: estimated taker fees to close (~$0.9/contract)
+- exit_fees_estimate: estimated taker fees to close (~$0.65/contract)
 - net_pnl: gross minus entry fees already paid
 - exit_pnl: what you'd ACTUALLY pocket if you close NOW — accounts for bid/ask spread + exit fees
 - exit_price: realistic close price (bid for longs, ask for shorts — you ALWAYS cross the spread on Deribit)

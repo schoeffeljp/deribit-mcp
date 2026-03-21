@@ -42,8 +42,8 @@ function getStopLossThreshold(dte: number): number {
   return -0.20;
 }
 
-/** Estimated taker fee per contract in USDC on Deribit options */
-const TAKER_FEE_PER_CONTRACT = 0.9;
+/** Estimated taker fee per contract in USDC on Deribit options (~0.03% of notional, varies by instrument) */
+const TAKER_FEE_PER_CONTRACT = 0.65;
 
 /** Determine the index name for a currency (for dollar conversion) */
 function indexNameForCurrency(currency: string): string | null {
@@ -201,6 +201,7 @@ export function registerAnalyticsTools(server: McpServer, client: DeribitClient)
             instrument_name: p.instrument_name,
             count: 100,
             sorting: "asc",
+            historical: true,
           });
           const tradeList = trades?.trades ?? trades;
           if (Array.isArray(tradeList) && tradeList.length > 0) {
