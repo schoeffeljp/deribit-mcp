@@ -224,7 +224,7 @@ export function registerPrivateTools(server: McpServer, client: DeribitClient) {
   // ── Get User Trades ───────────────────────────────────────────────
   server.tool(
     "get_user_trades",
-    "Get recent trade executions/fills for a currency. Shows trade price, size, fees, P&L, and IV for options trades.",
+    "Get recent trade fills for a currency. ALWAYS filter by kind (option, future, spot) to narrow results. Shows price, size, fees, P&L, IV, and underlying price. Use get_user_trades_by_instrument if you know the specific instrument name.",
     {
       currency: z.enum(["BTC", "ETH", "SOL", "USDC", "USDT", "EURR"]).describe("Currency"),
       kind: z.enum(["future", "option", "spot", "future_combo", "option_combo"]).optional().describe("Filter by instrument type"),
@@ -244,6 +244,39 @@ export function registerPrivateTools(server: McpServer, client: DeribitClient) {
       const result = await client.callPrivate("private/get_user_trades_by_currency", params);
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+  );
+
+  // ── Get User Trades by Instrument ──────────────────────────────────
+  server.tool(
+    "get_user_trades_by_instrument",
+    "Get trade history for a SPECIFIC instrument. Preferred when you know the instrument name (e.g. 'show me my fills on ETH_USDC-27MAR26-2400-C'). Returns price, size, fees, underlying price and IV at time of trade.",
+    {
+      instrument_name: z.string().describe("e.g. 'ETH_USDC-27MAR26-2400-C', 'ETH_USDC-PERPETUAL'"),
+      count: z.number().optional().describe("Number of trades to return (1-1000, default 100)"),
+      start_timestamp: z.number().optional().describe("Start timestamp in ms"),
+      end_timestamp: z.number().optional().describe("End timestamp in ms"),
+      sorting: z.enum(["asc", "desc", "default"]).optional().describe("Sort order"),
+    },
+    async ({ instrument_name, count, start_timestamp, end_timestamp, sorting }) => {
+      const params: Record<string, unknown> = {
+        instrument_name,
+        count: count ?? 100,
+        historical: true,
+      };
+      if (start_timestamp !== undefined) params.start_timestamp = start_timestamp;
+      if (end_timestamp !== undefined) params.end_timestamp = end_timestamp;
+      if (sorting) params.sorting = sorting;
+
+      const method = (start_timestamp || end_timestamp)
+        ? "private/get_user_trades_by_instrument_and_time"
+        : "private/get_user_trades_by_instrument";
+
+      const result = await client.callPrivate(method, params);
+      const trades = result?.trades ?? result;
+      return {
+        content: [{ type: "text", text: JSON.stringify(trades, null, 2) }],
       };
     }
   );
