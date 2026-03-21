@@ -76,7 +76,20 @@ if (transportMode === "http") {
     for await (const chunk of req) {
       chunks.push(chunk as Buffer);
     }
-    const body = JSON.parse(Buffer.concat(chunks).toString());
+    const rawBody = Buffer.concat(chunks).toString();
+    if (!rawBody) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Empty request body" }));
+      return;
+    }
+    let body: any;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Invalid JSON" }));
+      return;
+    }
 
     try {
       await transport.handleRequest(req, res, body);
