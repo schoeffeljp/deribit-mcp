@@ -134,7 +134,7 @@ export function registerAnalyticsTools(server: McpServer, client: DeribitClient)
   // ── analyze_position ──────────────────────────────────────────────
   server.tool(
     "analyze_position",
-    "Analyze open option positions with P&L, DTE, greeks, moneyness, risk flags, and recommendations (HOLD/TAKE_PROFIT/CLOSE/ROLL). Provides a systematic position health check.",
+    "PREFERRED tool for position analysis — returns fee-aware NET P&L (after actual entry fees from trade history + estimated exit fees at ~$0.9/contract taker), realistic exit simulation at bid/ask (not mark), DTE, greeks, moneyness, risk flags, and HOLD/TAKE_PROFIT/CLOSE/ROLL recommendations. Always use this instead of get_positions + get_ticker when analyzing positions.",
     {
       currency: z.enum(CURRENCIES).describe("Currency"),
       instrument_name: z.string().optional().describe("Specific instrument to analyze. If omitted, analyzes all option positions."),

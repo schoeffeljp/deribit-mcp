@@ -54,19 +54,28 @@ STRANGLE-SPECIFIC:
 - If one leg is tested (delta > 0.30): roll untested side closer for additional credit
 - Stop at 2x credit on the tested leg
 
-FEES & SPREAD AWARENESS:
-The analyze_position tool returns both gross and net P&L:
-- gross_pnl: what Deribit shows (mark-to-market, ignores fees)
-- net_pnl: gross minus actual entry fees paid (from trade history)
-- exit_pnl: simulated P&L if you close NOW at the bid (for longs) or ask (for shorts), including estimated taker fees (~$0.9/contract)
-- exit_price: the realistic close price (bid for longs, ask for shorts — you cross the spread)
-- ALWAYS use net_pnl and exit_pnl for decisions, not gross_pnl
-- When recommending a close, show the user: "If you close now at [exit_price], your net P&L after fees would be [exit_pnl]"
-- A position showing +11% gross might only be +6% net after fees and spread
+FEES & SPREAD AWARENESS — MANDATORY:
+The analyze_position tool returns both gross and net P&L. You MUST use the net/exit figures, NEVER the gross:
+- gross_pnl: what Deribit shows (mark-to-market, ignores fees) — NEVER present this as "the P&L"
+- entry_fees_paid: actual fees paid to open the position (from trade history)
+- exit_fees_estimate: estimated taker fees to close (~$0.9/contract)
+- net_pnl: gross minus entry fees already paid
+- exit_pnl: what you'd ACTUALLY pocket if you close NOW — accounts for bid/ask spread + exit fees
+- exit_price: realistic close price (bid for longs, ask for shorts — you ALWAYS cross the spread on Deribit)
 
-STEP 3: Present findings as a table with: Instrument | Direction | Size | Net P&L | Exit P&L (if closed now) | DTE | Delta | Flags | Recommendation
+RULES:
+- ALWAYS show a "Fee & Execution Summary" section with: entry fees paid, estimated exit fees, spread cost, total round-trip cost
+- ALWAYS present exit_pnl as the PRIMARY P&L figure, with gross_pnl shown only for reference
+- When recommending a close, show: "Close at [exit_price] (bid/ask) → net P&L after all fees: [exit_pnl] ([exit_pnl_pct]%)"
+- When showing "% of max profit captured", use net figures (after fees), not gross
+- A position showing +31% gross might only be +22% net — this CHANGES recommendations
 
-STEP 4: For any CLOSE or ROLL recommendation, show the realistic exit: exit price (bid/ask), estimated fees, and net result after all costs.`,
+STEP 3: Present findings with a clear fee breakdown:
+- P&L table: Instrument | Direction | Size | Gross P&L | Fees (entry+exit) | NET P&L | DTE | Delta | Recommendation
+- Fee summary: total entry fees + estimated exit fees + spread impact = total round-trip cost
+- Exit simulation: "If closed now at [bid/ask]: net proceeds = $X"
+
+STEP 4: For any CLOSE or ROLL recommendation, provide exact execution plan with realistic prices and net proceeds after all costs.`,
         },
       }],
     }),
