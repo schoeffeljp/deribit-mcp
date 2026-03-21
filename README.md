@@ -314,6 +314,13 @@ npm run test:watch   # Watch mode for tests
 
 Set `DERIBIT_TESTNET=false` in your `.env` or Claude Desktop config. **Use mainnet with caution — trading tools place real orders with real money.**
 
+## Clients & Related Projects
+
+This MCP server is designed to work with any MCP-compatible client. Here are purpose-built companions:
+
+- **[deribit-telegram-agent](https://github.com/schoeffeljp/deribit-telegram-agent)** — Conversational Telegram bot powered by Claude. Connects to this MCP server as a client for two-way trading, portfolio analysis, and strategy discussion on the go.
+- **[deribit-monitor](https://github.com/schoeffeljp/deribit-monitor)** — Automated portfolio monitoring with hourly Telegram summaries and threshold-based alerts (delta breach, P&L drawdown, IV spike, expiry warnings).
+
 ## License
 
 MIT
