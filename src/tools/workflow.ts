@@ -8,41 +8,49 @@ export function registerWorkflowTools(server: McpServer, client: DeribitClient) 
   // ── Get Expirations ───────────────────────────────────────────────
   server.tool(
     "get_expirations",
-    "List all available expiration dates for a currency's options, sorted chronologically. Returns expiry strings (e.g. '28MAR25') and the number of strikes available for each.",
+    "List available option expiration dates for a currency, sorted chronologically. For USDC currency, use 'underlying' to filter ETH vs BTC options.",
     {
       currency: z.enum(CURRENCIES).describe("Currency"),
+      underlying: z.enum(["ETH", "BTC", "SOL"]).optional().describe("Filter by underlying asset. REQUIRED for USDC currency to avoid mixing ETH and BTC options."),
+      max_dte: z.number().optional().describe("Only show expirations within this many days from today. E.g. 30 for next month."),
     },
-    async ({ currency }) => {
+    async ({ currency, underlying, max_dte }) => {
       const instruments: any[] = await client.callPublic("public/get_instruments", {
         currency,
         kind: "option",
         expired: false,
       });
 
-      const expiryMap = new Map<string, number>();
-      for (const inst of instruments) {
-        // instrument_name format: BTC-28MAR25-80000-C
-        const parts = inst.instrument_name.split("-");
-        const expiry = parts[1];
-        expiryMap.set(expiry, (expiryMap.get(expiry) ?? 0) + 1);
-      }
+      // Filter by underlying (e.g. only ETH_USDC-* when underlying="ETH")
+      const filtered = underlying
+        ? instruments.filter((inst) => inst.instrument_name.split("-")[0].startsWith(underlying))
+        : instruments;
 
-      // Sort by expiration_timestamp from instruments
+      const expiryMap = new Map<string, number>();
       const expiryDates = new Map<string, number>();
-      for (const inst of instruments) {
+
+      for (const inst of filtered) {
         const expiry = inst.instrument_name.split("-")[1];
+        expiryMap.set(expiry, (expiryMap.get(expiry) ?? 0) + 1);
         if (!expiryDates.has(expiry)) {
           expiryDates.set(expiry, inst.expiration_timestamp);
         }
       }
 
-      const sorted = [...expiryMap.entries()]
-        .sort((a, b) => (expiryDates.get(a[0]) ?? 0) - (expiryDates.get(b[0]) ?? 0))
-        .map(([expiry, count]) => ({
-          expiry,
-          expiration_timestamp: expiryDates.get(expiry),
-          num_strikes: Math.floor(count / 2), // calls + puts
-        }));
+      let entries = [...expiryMap.entries()]
+        .sort((a, b) => (expiryDates.get(a[0]) ?? 0) - (expiryDates.get(b[0]) ?? 0));
+
+      // Filter by max DTE
+      if (max_dte) {
+        const cutoff = Date.now() + max_dte * 24 * 60 * 60 * 1000;
+        entries = entries.filter(([expiry]) => (expiryDates.get(expiry) ?? 0) <= cutoff);
+      }
+
+      const sorted = entries.map(([expiry, count]) => ({
+        expiry,
+        expiration_timestamp: expiryDates.get(expiry),
+        num_strikes: Math.floor(count / 2),
+      }));
 
       return {
         content: [{ type: "text", text: JSON.stringify(sorted, null, 2) }],
@@ -53,45 +61,69 @@ export function registerWorkflowTools(server: McpServer, client: DeribitClient) 
   // ── Get Options Chain ─────────────────────────────────────────────
   server.tool(
     "get_options_chain",
-    "Get the full options chain for a currency and expiration in a single call. Returns all strikes with bid/ask, mark price, IV, greeks (delta, gamma, vega, theta), and open interest for both calls and puts. This is the primary tool for options analysis.",
+    "Get options chain for a specific currency + expiry. Returns strikes with bid/ask, mark price, IV, greeks, OI. IMPORTANT: always specify 'underlying' for USDC currency, and use 'atm_range' to limit strikes (default 10 = ATM ± 10).",
     {
       currency: z.enum(CURRENCIES).describe("Currency"),
       expiry: z.string().describe("Expiration date string (e.g. '28MAR25'). Use get_expirations to list available dates."),
+      underlying: z.enum(["ETH", "BTC", "SOL"]).optional().describe("Filter by underlying. REQUIRED for USDC to avoid mixing ETH/BTC options."),
+      atm_range: z.number().optional().describe("Number of strikes above and below ATM to return. Default 10. Use 5 for a quick view, 20 for full chain."),
     },
-    async ({ currency, expiry }) => {
-      // Step 1: Get all option instruments for this currency
+    async ({ currency, expiry, underlying, atm_range }) => {
+      const range = atm_range ?? 10;
+
       const instruments: any[] = await client.callPublic("public/get_instruments", {
         currency,
         kind: "option",
         expired: false,
       });
 
-      // Filter to the requested expiry
-      const filtered = instruments.filter((inst) => {
-        const parts = inst.instrument_name.split("-");
-        return parts[1] === expiry;
-      });
+      // Filter by expiry + underlying
+      let filtered = instruments.filter((inst) => inst.instrument_name.split("-")[1] === expiry);
+      if (underlying) {
+        filtered = filtered.filter((inst) => inst.instrument_name.split("-")[0].startsWith(underlying));
+      }
 
       if (filtered.length === 0) {
         return {
-          content: [{ type: "text", text: `No options found for ${currency} expiry ${expiry}` }],
+          content: [{ type: "text", text: `No options found for ${currency}${underlying ? '/' + underlying : ''} expiry ${expiry}` }],
         };
       }
 
-      // Step 2: Fetch tickers in parallel (batch of concurrent requests)
-      const tickerPromises = filtered.map((inst) =>
-        client.callPublic("public/ticker", { instrument_name: inst.instrument_name })
-          .catch((err) => ({ instrument_name: inst.instrument_name, error: err.message }))
-      );
-      const tickers = await Promise.all(tickerPromises);
+      // Get all unique strikes and find ATM
+      const strikes = [...new Set(filtered.map((inst) => Number(inst.instrument_name.split("-")[2])))].sort((a, b) => a - b);
 
-      // Step 3: Organize by strike into a chain structure
+      // Get index price to determine ATM (one quick ticker call)
+      const sampleTicker = await client.callPublic("public/ticker", { instrument_name: filtered[0].instrument_name });
+      const spotPrice = sampleTicker.underlying_price ?? sampleTicker.index_price;
+
+      // Find ATM strike
+      const atmStrike = strikes.reduce((closest, strike) =>
+        Math.abs(strike - spotPrice) < Math.abs(closest - spotPrice) ? strike : closest
+      );
+      const atmIdx = strikes.indexOf(atmStrike);
+      const minIdx = Math.max(0, atmIdx - range);
+      const maxIdx = Math.min(strikes.length - 1, atmIdx + range);
+      const selectedStrikes = new Set(strikes.slice(minIdx, maxIdx + 1));
+
+      // Only fetch tickers for selected strikes
+      const selectedInstruments = filtered.filter((inst) => {
+        const strike = Number(inst.instrument_name.split("-")[2]);
+        return selectedStrikes.has(strike);
+      });
+
+      const tickers = await Promise.all(
+        selectedInstruments.map((inst) =>
+          client.callPublic("public/ticker", { instrument_name: inst.instrument_name })
+            .catch(() => null)
+        )
+      );
+
       const strikeMap = new Map<number, { call?: any; put?: any }>();
       for (const ticker of tickers) {
-        if ((ticker as any).error) continue;
+        if (!ticker) continue;
         const parts = ticker.instrument_name.split("-");
         const strike = Number(parts[2]);
-        const type = parts[3]; // C or P
+        const type = parts[3];
 
         if (!strikeMap.has(strike)) strikeMap.set(strike, {});
         const row = strikeMap.get(strike)!;
@@ -108,18 +140,14 @@ export function registerWorkflowTools(server: McpServer, client: DeribitClient) 
           gamma: ticker.greeks?.gamma,
           vega: ticker.greeks?.vega,
           theta: ticker.greeks?.theta,
-          rho: ticker.greeks?.rho,
           open_interest: ticker.open_interest,
           volume: ticker.stats?.volume,
-          underlying_price: ticker.underlying_price,
-          underlying_index: ticker.underlying_index,
         };
 
         if (type === "C") row.call = summary;
         else row.put = summary;
       }
 
-      // Sort by strike
       const chain = [...strikeMap.entries()]
         .sort((a, b) => a[0] - b[0])
         .map(([strike, { call, put }]) => ({ strike, call, put }));
@@ -127,9 +155,12 @@ export function registerWorkflowTools(server: McpServer, client: DeribitClient) 
       const result = {
         currency,
         expiry,
+        underlying: underlying ?? "all",
         expiration_timestamp: filtered[0].expiration_timestamp,
-        num_strikes: chain.length,
-        underlying_price: chain[0]?.call?.underlying_price ?? chain[0]?.put?.underlying_price,
+        underlying_price: spotPrice,
+        atm_strike: atmStrike,
+        strikes_shown: chain.length,
+        total_strikes_available: strikes.length,
         chain,
       };
 
