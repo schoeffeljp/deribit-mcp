@@ -1,6 +1,6 @@
 # Deribit MCP — Crypto Options Trading Companion
 
-An MCP (Model Context Protocol) server that turns any AI assistant into a **crypto options trading companion**. Connects to [Deribit]([https://www.deribit.com](https://www.deribit.com/?reg=20894.963&q=home)) for real-time market data, portfolio management, trade execution, and risk analysis — all through natural language.
+An MCP (Model Context Protocol) server that turns any AI assistant into a **crypto options trading companion**. Connects to [Deribit](https://www.deribit.com/?reg=20894.963&q=home) for real-time market data, portfolio management, trade execution, and risk analysis — all through natural language.
 
 Beyond raw API access, it includes **analytical tools** (fee-aware P&L, IV rank, portfolio risk metrics), **workflow tools** (options chains, volatility surfaces), and **built-in skills** (position management, risk assessment, strategy scanning) that any MCP client can discover and use automatically.
 
