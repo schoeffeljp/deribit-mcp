@@ -54,9 +54,19 @@ STRANGLE-SPECIFIC:
 - If one leg is tested (delta > 0.30): roll untested side closer for additional credit
 - Stop at 2x credit on the tested leg
 
-STEP 3: Present findings as a table with: Instrument | Direction | Size | P&L % | DTE | Delta | Flags | Recommendation
+FEES & SPREAD AWARENESS:
+The analyze_position tool returns both gross and net P&L:
+- gross_pnl: what Deribit shows (mark-to-market, ignores fees)
+- net_pnl: gross minus actual entry fees paid (from trade history)
+- exit_pnl: simulated P&L if you close NOW at the bid (for longs) or ask (for shorts), including estimated taker fees (~$0.9/contract)
+- exit_price: the realistic close price (bid for longs, ask for shorts — you cross the spread)
+- ALWAYS use net_pnl and exit_pnl for decisions, not gross_pnl
+- When recommending a close, show the user: "If you close now at [exit_price], your net P&L after fees would be [exit_pnl]"
+- A position showing +11% gross might only be +6% net after fees and spread
 
-STEP 4: For any CLOSE or ROLL recommendation, explain specifically what to do and why.`,
+STEP 3: Present findings as a table with: Instrument | Direction | Size | Net P&L | Exit P&L (if closed now) | DTE | Delta | Flags | Recommendation
+
+STEP 4: For any CLOSE or ROLL recommendation, show the realistic exit: exit price (bid/ask), estimated fees, and net result after all costs.`,
         },
       }],
     }),

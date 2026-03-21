@@ -42,6 +42,9 @@ function getStopLossThreshold(dte: number): number {
   return -0.20;
 }
 
+/** Estimated taker fee per contract in USDC on Deribit options */
+const TAKER_FEE_PER_CONTRACT = 0.9;
+
 /** Determine the index name for a currency (for dollar conversion) */
 function indexNameForCurrency(currency: string): string | null {
   switch (currency) {
@@ -161,6 +164,16 @@ export function registerAnalyticsTools(server: McpServer, client: DeribitClient)
         };
       }
 
+      // Fetch tickers for bid/ask spread data (parallel)
+      const tickerPromises = filtered.map((p: any) =>
+        client.callPublic("public/ticker", { instrument_name: p.instrument_name }).catch(() => null)
+      );
+      const tickers = await Promise.all(tickerPromises);
+      const tickerMap = new Map<string, any>();
+      for (let i = 0; i < filtered.length; i++) {
+        if (tickers[i]) tickerMap.set(filtered[i].instrument_name, tickers[i]);
+      }
+
       const analyses = [];
 
       for (const p of filtered) {
@@ -169,68 +182,103 @@ export function registerAnalyticsTools(server: McpServer, client: DeribitClient)
 
         const direction = p.direction; // "buy" or "sell"
         const size = p.size; // positive for long, negative for short
+        const absSize = Math.abs(size);
         const isShort = direction === "sell";
         const entryPrice = p.average_price ?? 0;
         const markPrice = p.mark_price ?? 0;
         const floatingPnl = p.floating_profit_loss ?? 0;
-        const totalPnl = p.total_profit_loss ?? 0;
         const delta = p.delta ?? 0;
         const gamma = p.gamma ?? 0;
         const theta = p.theta ?? 0;
         const vega = p.vega ?? 0;
         const indexPrice = p.index_price ?? 0;
 
-        // P&L %
-        const costBasis = Math.abs(entryPrice * size);
-        const pnlPct = costBasis > 0 ? (floatingPnl / costBasis) * 100 : 0;
+        // ── Fees from trade history ──
+        let entryFees = 0;
+        let dit: number | null = null;
+        try {
+          const trades = await client.callPrivate("private/get_user_trades_by_instrument", {
+            instrument_name: p.instrument_name,
+            count: 100,
+            sorting: "asc",
+          });
+          const tradeList = trades?.trades ?? trades;
+          if (Array.isArray(tradeList) && tradeList.length > 0) {
+            // DIT from first trade
+            dit = Math.round((Date.now() - tradeList[0].timestamp) / (24 * 60 * 60 * 1000));
+            // Sum all fees paid on this instrument
+            for (const t of tradeList) {
+              entryFees += Math.abs(t.fee ?? 0);
+            }
+          }
+        } catch { /* non-critical */ }
 
-        // For short options: % of max profit captured
-        // Max profit = entry credit. Current cost to close = mark price.
-        // Profit captured = (entry - mark) / entry * 100
+        // ── Bid/Ask from ticker ──
+        const ticker = tickerMap.get(p.instrument_name);
+        const bestBid = ticker?.best_bid_price ?? markPrice;
+        const bestAsk = ticker?.best_ask_price ?? markPrice;
+        const spread = bestAsk - bestBid;
+
+        // ── Exit simulation ──
+        // To close: shorts buy back at ask, longs sell at bid
+        const exitPrice = isShort ? bestAsk : bestBid;
+        const exitFeesEstimate = absSize * TAKER_FEE_PER_CONTRACT;
+
+        // Gross P&L (mark-based, what Deribit shows)
+        const grossPnl = floatingPnl;
+
+        // Net P&L = gross P&L - entry fees already paid
+        const netPnl = grossPnl - entryFees;
+
+        // Simulated exit P&L = what you'd actually pocket if you close NOW
+        // For shorts: (entry - exit) * size - entry fees - exit fees
+        // For longs: (exit - entry) * size - entry fees - exit fees
+        const exitPnl = isShort
+          ? (entryPrice - exitPrice) * absSize - entryFees - exitFeesEstimate
+          : (exitPrice - entryPrice) * absSize - entryFees - exitFeesEstimate;
+
+        // P&L % based on net P&L
+        const costBasis = Math.abs(entryPrice * absSize);
+        const grossPnlPct = costBasis > 0 ? (grossPnl / costBasis) * 100 : 0;
+        const netPnlPct = costBasis > 0 ? (netPnl / costBasis) * 100 : 0;
+        const exitPnlPct = costBasis > 0 ? (exitPnl / costBasis) * 100 : 0;
+
+        // For short options: % of max profit captured (net of fees)
         let maxProfitPct: number | null = null;
         if (isShort && entryPrice > 0) {
-          maxProfitPct = Math.round(((entryPrice - markPrice) / entryPrice) * 100 * 10) / 10;
+          // Net max profit = entry credit * size - entry fees - exit fees (at 0)
+          const grossMaxProfit = entryPrice * absSize;
+          const netMaxProfit = grossMaxProfit - entryFees - exitFeesEstimate;
+          const currentNetProfit = (entryPrice - exitPrice) * absSize - entryFees - exitFeesEstimate;
+          maxProfitPct = netMaxProfit > 0
+            ? Math.round((currentNetProfit / netMaxProfit) * 100 * 10) / 10
+            : null;
         }
 
         // Moneyness
         let otmPct = 0;
         if (indexPrice > 0) {
           if (parsed.type === "C") {
-            otmPct = ((parsed.strike - indexPrice) / indexPrice) * 100; // positive = OTM
+            otmPct = ((parsed.strike - indexPrice) / indexPrice) * 100;
           } else {
-            otmPct = ((indexPrice - parsed.strike) / indexPrice) * 100; // positive = OTM
+            otmPct = ((indexPrice - parsed.strike) / indexPrice) * 100;
           }
         }
 
-        // DIT — try to get earliest trade
-        let dit: number | null = null;
-        try {
-          const trades = await client.callPrivate("private/get_user_trades_by_instrument", {
-            instrument_name: p.instrument_name,
-            count: 1,
-            sorting: "asc",
-          });
-          const tradeList = trades?.trades ?? trades;
-          if (Array.isArray(tradeList) && tradeList.length > 0) {
-            const firstTradeTs = tradeList[0].timestamp;
-            dit = Math.round((Date.now() - firstTradeTs) / (24 * 60 * 60 * 1000));
-          }
-        } catch { /* non-critical */ }
-
-        // Risk flags
+        // ── Risk flags (use NET P&L for decisions) ──
         const flags: string[] = [];
         const stopThreshold = getStopLossThreshold(parsed.dte);
 
-        // Profit target reached
+        // Profit target reached (based on net)
         if (isShort && maxProfitPct !== null && maxProfitPct >= 50) {
           flags.push("profit_target_reached");
         }
-        if (!isShort && pnlPct >= 50) {
+        if (!isShort && netPnlPct >= 50) {
           flags.push("profit_target_reached");
         }
 
-        // Stop loss zone
-        if (pnlPct < stopThreshold * 100) {
+        // Stop loss zone (based on net)
+        if (netPnlPct < stopThreshold * 100) {
           flags.push("stop_loss_zone");
         }
 
@@ -246,7 +294,7 @@ export function registerAnalyticsTools(server: McpServer, client: DeribitClient)
         if (parsed.dte < 3) flags.push("expiry_critical");
         else if (parsed.dte < 7) flags.push("expiry_warning");
 
-        // Recommendation
+        // Recommendation (based on net P&L and exit simulation)
         let recommendation = "HOLD";
         if (flags.includes("expiry_critical") || flags.includes("stop_loss_zone")) {
           recommendation = "CLOSE";
@@ -254,18 +302,30 @@ export function registerAnalyticsTools(server: McpServer, client: DeribitClient)
           recommendation = "CLOSE";
         } else if (flags.includes("profit_target_reached")) {
           recommendation = "TAKE_PROFIT";
-        } else if (parsed.dte < 21 && pnlPct < -10 && pnlPct > stopThreshold * 100) {
+        } else if (parsed.dte < 21 && netPnlPct < -10 && netPnlPct > stopThreshold * 100) {
           recommendation = "ROLL";
         }
 
         analyses.push({
           instrument_name: p.instrument_name,
           direction,
-          size: Math.abs(size),
+          size: absSize,
           entry_price: entryPrice,
           mark_price: markPrice,
-          pnl_usd: Math.round(floatingPnl * 100) / 100,
-          pnl_pct: Math.round(pnlPct * 10) / 10,
+          best_bid: Math.round(bestBid * 10000) / 10000,
+          best_ask: Math.round(bestAsk * 10000) / 10000,
+          spread: Math.round(spread * 10000) / 10000,
+          // P&L breakdown
+          gross_pnl: Math.round(grossPnl * 100) / 100,
+          gross_pnl_pct: Math.round(grossPnlPct * 10) / 10,
+          entry_fees_paid: Math.round(entryFees * 100) / 100,
+          exit_fees_estimate: Math.round(exitFeesEstimate * 100) / 100,
+          net_pnl: Math.round(netPnl * 100) / 100,
+          net_pnl_pct: Math.round(netPnlPct * 10) / 10,
+          // Exit simulation
+          exit_price: Math.round(exitPrice * 10000) / 10000,
+          exit_pnl: Math.round(exitPnl * 100) / 100,
+          exit_pnl_pct: Math.round(exitPnlPct * 10) / 10,
           max_profit_pct: maxProfitPct,
           dte: Math.round(parsed.dte * 10) / 10,
           dit,
