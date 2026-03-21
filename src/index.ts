@@ -8,6 +8,8 @@ import { DeribitClient } from "./deribit-client.js";
 import { registerPublicTools } from "./tools/public.js";
 import { registerPrivateTools } from "./tools/private.js";
 import { registerWorkflowTools } from "./tools/workflow.js";
+import { registerAnalyticsTools } from "./tools/analytics.js";
+import { registerPrompts } from "./prompts.js";
 
 function createMcpServer(client: DeribitClient): McpServer {
   const server = new McpServer({
@@ -18,6 +20,8 @@ function createMcpServer(client: DeribitClient): McpServer {
   registerPublicTools(server, client);
   registerPrivateTools(server, client);
   registerWorkflowTools(server, client);
+  registerAnalyticsTools(server, client);
+  registerPrompts(server);
 
   return server;
 }
