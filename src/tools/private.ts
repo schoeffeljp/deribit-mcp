@@ -41,6 +41,21 @@ export function registerPrivateTools(server: McpServer, client: DeribitClient) {
     }
   );
 
+  // ── Get Order State ─────────────────────────────────────────────────
+  server.tool(
+    "get_order_state",
+    "Get the current state of an order by its order_id. Returns order_state (open, filled, cancelled, rejected, untriggered), average_price, filled_amount, price, and all order details. Use this to check if an order was filled, partially filled, or cancelled.",
+    {
+      order_id: z.string().describe("The order ID to check"),
+    },
+    async ({ order_id }) => {
+      const result = await client.callPrivate("private/get_order_state", { order_id });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+  );
+
   // ── Get Open Orders ─────────────────────────────────────────────────
   server.tool(
     "get_open_orders",
