@@ -401,12 +401,16 @@ export function registerAnalyticsTools(server: McpServer, client: DeribitClient)
         netTheta += p.theta ?? 0;
       }
 
-      // Dollar greeks
-      const dollarDelta = (account.delta_total ?? 0) * dollarMultiplier;
-      const dollarTheta = netTheta * dollarMultiplier;
-      const dollarGamma = netGamma * dollarMultiplier;
-      const dollarVega = netVega * dollarMultiplier;
-      const equityUsd = equity * dollarMultiplier;
+      // IMPORTANT: For ETH/BTC/SOL options, Deribit already returns greeks in USD terms.
+      // - theta = USD/day (not ETH/day)
+      // - delta = USD per $1 move
+      // So netTheta, netDelta, netGamma, netVega are ALREADY in USD. No multiplication needed.
+      // dollarMultiplier is only needed to convert equity from ETH to USD.
+      const dollarDelta = netDelta; // Already in USD from Deribit
+      const dollarTheta = netTheta; // Already in USD from Deribit
+      const dollarGamma = netGamma; // Already in USD from Deribit
+      const dollarVega = netVega;   // Already in USD from Deribit
+      const equityUsd = equity * dollarMultiplier; // Convert ETH equity to USD
 
       // Metrics
       const thetaNetliqPct = equityUsd > 0 ? (Math.abs(dollarTheta) / equityUsd) * 100 : 0;
